@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Adding a connection with Microsoft Entra ID is available again, now verified against a real Azure namespace.
+- "Browse my subscriptions" lists the subscriptions of every tenant of the account, not only the default one. Personal Microsoft accounts no longer get an empty list.
+- A missing permission is reported in a couple of seconds. Before, the panel waited 90 seconds and then showed nothing.
+- Permission errors explain that being Owner of the namespace is not enough to read or send messages: the Azure Service Bus data roles are required.
+
 ## 0.2.0
 
 First stable release.

@@ -33,7 +33,11 @@ export class ClientFactory {
   }
 
   private async create(connection: ConnectionConfig): Promise<Clients> {
-    const options: ServiceBusClientOptions = {};
+    // The SDK defaults (3 retries, 30 s apart) suit background services. It also retries
+    // authorization failures, so a missing role would leave a panel waiting for 90 seconds.
+    const options: ServiceBusClientOptions = {
+      retryOptions: { maxRetries: 1, retryDelayInMs: 1000, timeoutInMs: 30_000 },
+    };
     const isEmulator = connection.kind === 'connectionString' && connection.emulatorAdminPort !== undefined;
     // The emulator only supports AMQP over TCP.
     if (!isEmulator && vscode.workspace.getConfiguration('serviceBusWorkbench').get<boolean>('useWebSockets')) {

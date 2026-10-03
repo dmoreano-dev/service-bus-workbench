@@ -3,14 +3,25 @@ import type { AccessToken, TokenCredential } from '@azure/core-auth';
 
 /** Azure SDK credential backed by VS Code's built-in Microsoft account sign-in. */
 export class VSCodeCredential implements TokenCredential {
-  constructor(private readonly tenantId?: string) {}
+  /** With `silent`, never prompts: getToken() throws when VS Code has no session for the tenant. */
+  constructor(
+    private readonly tenantId?: string,
+    private readonly silent = false,
+  ) {}
 
   async getToken(scopes: string | string[]): Promise<AccessToken> {
     const requested = Array.isArray(scopes) ? [...scopes] : [scopes];
     if (this.tenantId) {
       requested.push(`VSCODE_TENANT:${this.tenantId}`);
     }
-    const session = await vscode.authentication.getSession('microsoft', requested, { createIfNone: true });
+    const session = await vscode.authentication.getSession(
+      'microsoft',
+      requested,
+      this.silent ? { silent: true } : { createIfNone: true },
+    );
+    if (!session) {
+      throw new Error('No Microsoft session is available without signing in.');
+    }
     return { token: session.accessToken, expiresOnTimestamp: expiryOf(session.accessToken) };
   }
 }

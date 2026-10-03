@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { randomUUID } from 'crypto';
 import { parseServiceBusConnectionString } from '@azure/service-bus';
 import { VSCodeCredential } from '../auth/vscodeCredential';
-import { listNamespaces, listSubscriptions } from '../azure/arm';
+import { listNamespaces, listSubscriptions, listTenants, Subscription } from '../azure/arm';
 import { ConnectionStore } from '../connections/connectionStore';
 
 type Method = 'connectionString' | 'browse' | 'manual' | 'emulator';
@@ -11,10 +11,10 @@ const EMULATOR_CONNECTION_STRING =
   'Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;';
 const EMULATOR_ADMIN_PORT = 5300;
 /**
- * Microsoft Entra ID connections are hidden until they are verified against a real Azure
- * namespace. Connections that already exist keep working; only adding new ones is off.
+ * Set to false to hide the Microsoft Entra ID options in "Add Connection". Connections that
+ * already exist keep working; only adding new ones is turned off.
  */
-const ENTRA_ID_ENABLED: boolean = false;
+const ENTRA_ID_ENABLED: boolean = true;
 const ENTRA_ID_METHODS: Method[] = ['browse', 'manual'];
 const isEmulator = (connectionString: string) => /UseDevelopmentEmulator\s*=\s*true/i.test(connectionString);
 
@@ -99,9 +99,7 @@ async function addConnectionString(store: ConnectionStore): Promise<void> {
 
 async function browseNamespaces(store: ConnectionStore): Promise<void> {
   try {
-    const subscriptions = await withProgress('Loading Azure subscriptions…', () =>
-      listSubscriptions(new VSCodeCredential()),
-    );
+    const subscriptions = await withProgress('Loading Azure subscriptions…', listAllSubscriptions);
     if (subscriptions.length === 0) {
       void vscode.window.showWarningMessage('No Azure subscriptions were found for this account.');
       return;
@@ -138,6 +136,32 @@ async function browseNamespaces(store: ConnectionStore): Promise<void> {
   } catch (err) {
     void vscode.window.showErrorMessage(`Could not browse Azure: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/**
+ * Subscriptions of every tenant the account belongs to. A token for the default tenant only
+ * lists that tenant's subscriptions, and a personal Microsoft account usually has them elsewhere.
+ * Other tenants are tried without prompting; sign-in is only requested when nothing was found.
+ */
+async function listAllSubscriptions(): Promise<Subscription[]> {
+  const found = new Map<string, Subscription>();
+  const collect = async (tenantId?: string, silent = false) => {
+    for (const s of await listSubscriptions(new VSCodeCredential(tenantId, silent))) {
+      found.set(s.subscriptionId, s);
+    }
+  };
+  await collect();
+  const needSignIn: string[] = [];
+  for (const tenantId of await listTenants(new VSCodeCredential())) {
+    await collect(tenantId, true).catch(() => needSignIn.push(tenantId));
+  }
+  for (const tenantId of needSignIn) {
+    if (found.size > 0) {
+      break;
+    }
+    await collect(tenantId).catch(() => undefined);
+  }
+  return [...found.values()];
 }
 
 async function enterNamespace(store: ConnectionStore): Promise<void> {

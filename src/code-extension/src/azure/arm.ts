@@ -39,6 +39,12 @@ async function getAll<T>(credential: TokenCredential, path: string): Promise<T[]
   return items;
 }
 
+/** Tenants (directories) the account belongs to. A token only sees the subscriptions of its own tenant. */
+export async function listTenants(credential: TokenCredential): Promise<string[]> {
+  const tenants = await getAll<{ tenantId: string }>(credential, '/tenants?api-version=2022-12-01');
+  return tenants.map((t) => t.tenantId);
+}
+
 export function listSubscriptions(credential: TokenCredential): Promise<Subscription[]> {
   return getAll<Subscription>(credential, '/subscriptions?api-version=2022-12-01');
 }
