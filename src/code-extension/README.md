@@ -2,7 +2,7 @@
 
 Explore Azure Service Bus queues from VS Code: peek and receive messages, send and resend them, and keep a history of everything you sent.
 
-> **Preview.** Everything below has been tested against the local Service Bus emulator. Connecting with Microsoft Entra ID, RBAC permission hints and AMQP over WebSockets have not been verified against a real Azure namespace yet. Please [report any problem](https://github.com/dmoreano-dev/service-bus-workbench/issues).
+> **Note.** Everything below has been tested against the local Service Bus emulator. Connecting with Microsoft Entra ID, RBAC permission hints and AMQP over WebSockets have not been verified against a real Azure namespace yet. Please [report any problem](https://github.com/dmoreano-dev/service-bus-workbench/issues).
 
 ## Features
 

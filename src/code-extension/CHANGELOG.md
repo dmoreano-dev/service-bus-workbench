@@ -1,8 +1,12 @@
 # Changelog
 
-## 0.1.0
+## 0.2.0
 
-First preview.
+First stable release. Same features as 0.1.0.
+
+## 0.1.0 (pre-release)
+
+First public version.
 
 - Connect with a connection string, with Microsoft Entra ID, or to the local emulator.
 - Queue tree with active and dead-letter message counts.
