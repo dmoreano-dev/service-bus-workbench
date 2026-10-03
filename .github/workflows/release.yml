@@ -1,13 +1,13 @@
 name: Release
 
-# Runs when a GitHub Release is published. A release marked "Set as a pre-release"
-# is published to the Marketplace as a pre-release; any other one as a stable version.
+# Runs when a version tag is pushed, e.g. `git tag v0.1.0 && git push origin v0.1.0`.
+# An odd minor version (0.1.x, 0.3.x) is published as a pre-release; an even one as a stable version.
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
 
 permissions:
-  contents: write # attach the .vsix to the release
+  contents: write # create the GitHub Release
   id-token: write # sign in to Azure with the federated credential
 
 jobs:
@@ -18,8 +18,7 @@ jobs:
       run:
         working-directory: src/code-extension
     env:
-      TAG: ${{ github.event.release.tag_name }}
-      PRERELEASE: ${{ github.event.release.prerelease }}
+      TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,22 +30,19 @@ jobs:
 
       - name: Check that the tag matches the version in package.json
         run: |
-          version="v$(node -p "require('./package.json').version")"
-          if [ "$version" != "$TAG" ]; then
-            echo "::error::The release tag is $TAG but package.json says $version."
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::The tag is $TAG but package.json says v$version."
             exit 1
+          fi
+          minor="$(echo "$version" | cut -d. -f2)"
+          if [ $((minor % 2)) -eq 1 ]; then
+            echo "PRE_RELEASE_FLAG=--pre-release" >> "$GITHUB_ENV"
+            echo "RELEASE_FLAG=--prerelease" >> "$GITHUB_ENV"
           fi
 
       - name: Package
-        run: |
-          flags=""
-          if [ "$PRERELEASE" = "true" ]; then flags="--pre-release"; fi
-          npx vsce package --no-dependencies $flags --out "service-bus-workbench-$TAG.vsix"
-
-      - name: Attach the .vsix to the release
-        run: gh release upload "$TAG" "service-bus-workbench-$TAG.vsix" --clobber
-        env:
-          GH_TOKEN: ${{ github.token }}
+        run: npx vsce package --no-dependencies $PRE_RELEASE_FLAG --out "service-bus-workbench-$TAG.vsix"
 
       - uses: azure/login@v2
         with:
@@ -56,3 +52,8 @@ jobs:
 
       - name: Publish to the Marketplace
         run: npx vsce publish --packagePath "service-bus-workbench-$TAG.vsix" --azure-credential
+
+      - name: Create the GitHub Release with the .vsix
+        run: gh release create "$TAG" "service-bus-workbench-$TAG.vsix" --title "$TAG" --generate-notes $RELEASE_FLAG
+        env:
+          GH_TOKEN: ${{ github.token }}
