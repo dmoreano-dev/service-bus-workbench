@@ -1,0 +1,58 @@
+name: Release
+
+# Runs when a GitHub Release is published. A release marked "Set as a pre-release"
+# is published to the Marketplace as a pre-release; any other one as a stable version.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # attach the .vsix to the release
+  id-token: write # sign in to Azure with the federated credential
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: src/code-extension
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      PRERELEASE: ${{ github.event.release.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: src/code-extension/package-lock.json
+      - run: npm ci
+
+      - name: Check that the tag matches the version in package.json
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$version" != "$TAG" ]; then
+            echo "::error::The release tag is $TAG but package.json says $version."
+            exit 1
+          fi
+
+      - name: Package
+        run: |
+          flags=""
+          if [ "$PRERELEASE" = "true" ]; then flags="--pre-release"; fi
+          npx vsce package --no-dependencies $flags --out "service-bus-workbench-$TAG.vsix"
+
+      - name: Attach the .vsix to the release
+        run: gh release upload "$TAG" "service-bus-workbench-$TAG.vsix" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Publish to the Marketplace
+        run: npx vsce publish --packagePath "service-bus-workbench-$TAG.vsix" --azure-credential

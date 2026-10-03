@@ -1,0 +1,234 @@
+body {
+  padding: 12px 16px;
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+h2 {
+  margin: 0 0 4px;
+  font-size: 1.2em;
+  font-weight: 600;
+}
+
+.muted {
+  margin: 0 0 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.hidden {
+  display: none;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+button {
+  padding: 4px 12px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+button.secondary {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+}
+
+button.secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+button.danger {
+  color: var(--vscode-errorForeground);
+  background: transparent;
+  border-color: var(--vscode-errorForeground);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input,
+textarea {
+  box-sizing: border-box;
+  padding: 4px 6px;
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+textarea {
+  width: 100%;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  resize: vertical;
+}
+
+input:focus,
+textarea:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+input[type='number'] {
+  width: 70px;
+}
+
+form label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+form label input,
+form label textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 12px;
+}
+
+.status {
+  min-height: 1.4em;
+  margin-bottom: 8px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.status.error {
+  color: var(--vscode-errorForeground);
+}
+
+.table-wrap {
+  position: relative;
+  min-height: 90px;
+  max-height: 45vh;
+  overflow: auto;
+  border: 1px solid var(--vscode-panel-border);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  max-width: 320px;
+  padding: 4px 8px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background: var(--vscode-editorWidget-background);
+  font-weight: 600;
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+tbody tr:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+tbody tr.selected {
+  color: var(--vscode-list-activeSelectionForeground);
+  background: var(--vscode-list-activeSelectionBackground);
+}
+
+td.empty {
+  color: var(--vscode-descriptionForeground);
+  cursor: default;
+}
+
+.details {
+  margin-top: 12px;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0 0 8px;
+}
+
+dt {
+  color: var(--vscode-descriptionForeground);
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+pre {
+  max-height: 40vh;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  background: var(--vscode-textCodeBlock-background);
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--vscode-editor-background) 80%, transparent);
+}
+
+.loading.hidden {
+  display: none;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--vscode-progressBar-background);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

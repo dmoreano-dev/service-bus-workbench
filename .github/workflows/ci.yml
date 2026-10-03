@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/code-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: src/code-extension/package-lock.json
+      - run: npm ci
+      # Type-checks and bundles through vscode:prepublish.
+      - run: npm run vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: src/code-extension/*.vsix
+          if-no-files-found: error

@@ -1,0 +1,273 @@
+{
+  "name": "service-bus-workbench",
+  "displayName": "Service Bus Workbench",
+  "description": "Explore Azure Service Bus queues: peek and receive messages, send and resend them, and keep a history of everything you sent.",
+  "version": "0.1.0",
+  "publisher": "dmoreano-dev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dmoreano-dev/service-bus-workbench"
+  },
+  "bugs": {
+    "url": "https://github.com/dmoreano-dev/service-bus-workbench/issues"
+  },
+  "homepage": "https://github.com/dmoreano-dev/service-bus-workbench#readme",
+  "icon": "media/icon.png",
+  "preview": true,
+  "keywords": [
+    "azure",
+    "service bus",
+    "servicebus",
+    "queue",
+    "dead-letter",
+    "messaging",
+    "emulator"
+  ],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Azure",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "serviceBusWorkbench",
+          "title": "Service Bus Workbench",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "serviceBusWorkbench": [
+        {
+          "id": "sbw.connections",
+          "name": "Connections"
+        },
+        {
+          "id": "sbw.history",
+          "name": "Sent History"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "sbw.connections",
+        "contents": "No Service Bus connections yet.\n[Add Connection](command:sbw.addConnection)"
+      },
+      {
+        "view": "sbw.history",
+        "contents": "Messages you send or resend will show up here."
+      }
+    ],
+    "commands": [
+      {
+        "command": "sbw.addConnection",
+        "title": "Add Connection…",
+        "category": "Service Bus",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sbw.refresh",
+        "title": "Refresh",
+        "category": "Service Bus",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sbw.removeConnection",
+        "title": "Remove Connection",
+        "category": "Service Bus"
+      },
+      {
+        "command": "sbw.openMessages",
+        "title": "Peek Messages",
+        "category": "Service Bus"
+      },
+      {
+        "command": "sbw.openDeadLetter",
+        "title": "Peek Dead-letter Messages",
+        "category": "Service Bus"
+      },
+      {
+        "command": "sbw.sendMessage",
+        "title": "Send Message…",
+        "category": "Service Bus",
+        "icon": "$(send)"
+      },
+      {
+        "command": "sbw.history.open",
+        "title": "Edit and Send Again…",
+        "category": "Service Bus"
+      },
+      {
+        "command": "sbw.history.resend",
+        "title": "Send Again As-is",
+        "category": "Service Bus",
+        "icon": "$(debug-rerun)"
+      },
+      {
+        "command": "sbw.history.delete",
+        "title": "Delete History Entry",
+        "category": "Service Bus"
+      },
+      {
+        "command": "sbw.history.clear",
+        "title": "Clear Sent History",
+        "category": "Service Bus",
+        "icon": "$(clear-all)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sbw.addConnection",
+          "when": "view == sbw.connections",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sbw.refresh",
+          "when": "view == sbw.connections",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sbw.history.clear",
+          "when": "view == sbw.history",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sbw.removeConnection",
+          "when": "view == sbw.connections && viewItem == connection"
+        },
+        {
+          "command": "sbw.sendMessage",
+          "when": "view == sbw.connections && viewItem == queue",
+          "group": "inline"
+        },
+        {
+          "command": "sbw.sendMessage",
+          "when": "view == sbw.connections && viewItem == queue",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "sbw.openMessages",
+          "when": "view == sbw.connections && viewItem == queue",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "sbw.openDeadLetter",
+          "when": "view == sbw.connections && viewItem == queue",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "sbw.history.resend",
+          "when": "view == sbw.history && viewItem == historyEntry",
+          "group": "inline"
+        },
+        {
+          "command": "sbw.history.open",
+          "when": "view == sbw.history && viewItem == historyEntry",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "sbw.history.resend",
+          "when": "view == sbw.history && viewItem == historyEntry",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "sbw.history.delete",
+          "when": "view == sbw.history && viewItem == historyEntry",
+          "group": "2_danger"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "sbw.removeConnection",
+          "when": "false"
+        },
+        {
+          "command": "sbw.openMessages",
+          "when": "false"
+        },
+        {
+          "command": "sbw.openDeadLetter",
+          "when": "false"
+        },
+        {
+          "command": "sbw.sendMessage",
+          "when": "false"
+        },
+        {
+          "command": "sbw.history.open",
+          "when": "false"
+        },
+        {
+          "command": "sbw.history.resend",
+          "when": "false"
+        },
+        {
+          "command": "sbw.history.delete",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Service Bus Workbench",
+      "properties": {
+        "serviceBusWorkbench.peekBatchSize": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 500,
+          "description": "Default number of messages to peek or receive at a time."
+        },
+        "serviceBusWorkbench.useWebSockets": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use AMQP over WebSockets (port 443) instead of plain AMQP (port 5671). Enable this if a firewall blocks port 5671."
+        },
+        "serviceBusWorkbench.history.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Record every message you send or resend in the Sent History view. History is stored only on this machine."
+        },
+        "serviceBusWorkbench.history.maxEntries": {
+          "type": "number",
+          "default": 500,
+          "minimum": 1,
+          "description": "Maximum number of entries kept in the sent history. Oldest entries are dropped first."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "npm run check-types && node esbuild.js",
+    "check-types": "tsc --noEmit",
+    "watch": "node esbuild.js --watch",
+    "package": "npm run check-types && node esbuild.js --production",
+    "vscode:prepublish": "node -e \"require('fs').copyFileSync('../../LICENSE','LICENSE')\" && npm run package",
+    "seed:local": "node scripts/seed-local.mjs",
+    "host": "node esbuild.js && node scripts/launch-host.mjs",
+    "vsix": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "@azure/core-auth": "^1.9.0",
+    "@azure/service-bus": "^7.9.5",
+    "long": "^5.3.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "~1.90.0",
+    "@types/ws": "^8.5.12",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.25.12",
+    "typescript": "^5.6.0"
+  }
+}

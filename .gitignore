@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.vsix
+.DS_Store
+bin/
+obj/
+src/code-extension/LICENSE
