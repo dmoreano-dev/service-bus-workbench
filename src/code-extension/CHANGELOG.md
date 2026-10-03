@@ -2,7 +2,9 @@
 
 ## 0.2.0
 
-First stable release. Same features as 0.1.0.
+First stable release.
+
+- Adding a connection with Microsoft Entra ID is hidden until it is verified against a real Azure namespace. Use a connection string or the local emulator.
 
 ## 0.1.0 (pre-release)
 

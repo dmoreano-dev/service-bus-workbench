@@ -10,32 +10,39 @@ type Method = 'connectionString' | 'browse' | 'manual' | 'emulator';
 const EMULATOR_CONNECTION_STRING =
   'Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;';
 const EMULATOR_ADMIN_PORT = 5300;
+/**
+ * Microsoft Entra ID connections are hidden until they are verified against a real Azure
+ * namespace. Connections that already exist keep working; only adding new ones is off.
+ */
+const ENTRA_ID_ENABLED: boolean = false;
+const ENTRA_ID_METHODS: Method[] = ['browse', 'manual'];
 const isEmulator = (connectionString: string) => /UseDevelopmentEmulator\s*=\s*true/i.test(connectionString);
 
 export async function addConnection(store: ConnectionStore): Promise<void> {
-  const method = await vscode.window.showQuickPick<vscode.QuickPickItem & { method: Method }>(
-    [
-      {
-        method: 'connectionString',
-        label: '$(key) Connection string',
-        detail: 'Namespace-level or queue-level shared access (SAS) connection string',
-      },
-      {
-        method: 'browse',
-        label: '$(azure) Microsoft Entra ID: browse my subscriptions',
-        detail: 'Sign in and pick a namespace from your Azure subscriptions',
-      },
-      {
-        method: 'manual',
-        label: '$(globe) Microsoft Entra ID: enter the namespace host name',
-        detail: 'Use this when you have data roles on a namespace but cannot see its subscription',
-      },
-      {
-        method: 'emulator',
-        label: '$(vm) Local emulator',
-        detail: 'Service Bus emulator on localhost with its default ports (5672 and 5300)',
-      },
-    ],
+  const methods: (vscode.QuickPickItem & { method: Method })[] = [
+    {
+      method: 'connectionString',
+      label: '$(key) Connection string',
+      detail: 'Namespace-level or queue-level shared access (SAS) connection string',
+    },
+    {
+      method: 'browse',
+      label: '$(azure) Microsoft Entra ID: browse my subscriptions',
+      detail: 'Sign in and pick a namespace from your Azure subscriptions',
+    },
+    {
+      method: 'manual',
+      label: '$(globe) Microsoft Entra ID: enter the namespace host name',
+      detail: 'Use this when you have data roles on a namespace but cannot see its subscription',
+    },
+    {
+      method: 'emulator',
+      label: '$(vm) Local emulator',
+      detail: 'Service Bus emulator on localhost with its default ports (5672 and 5300)',
+    },
+  ];
+  const method = await vscode.window.showQuickPick(
+    methods.filter((m) => ENTRA_ID_ENABLED || !ENTRA_ID_METHODS.includes(m.method)),
     { title: 'Add Service Bus connection' },
   );
   switch (method?.method) {

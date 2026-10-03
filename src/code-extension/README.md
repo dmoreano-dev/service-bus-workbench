@@ -2,11 +2,11 @@
 
 Explore Azure Service Bus queues from VS Code: peek and receive messages, send and resend them, and keep a history of everything you sent.
 
-> **Note.** Everything below has been tested against the local Service Bus emulator. Connecting with Microsoft Entra ID, RBAC permission hints and AMQP over WebSockets have not been verified against a real Azure namespace yet. Please [report any problem](https://github.com/dmoreano-dev/service-bus-workbench/issues).
+> **Note.** Everything below has been tested against the local Service Bus emulator. Connection strings for a real Azure namespace and AMQP over WebSockets have not been verified yet. Please [report any problem](https://github.com/dmoreano-dev/service-bus-workbench/issues).
 
 ## Features
 
-- **Connections** with a connection string (for a namespace or a single queue), with Microsoft Entra ID using the Microsoft account signed in to VS Code, or to the local emulator with one click.
+- **Connections** with a connection string (for a namespace or a single queue), or to the local emulator with one click.
 - **Queue tree** with active and dead-letter message counts.
 - **Peek** a queue and its dead-letter queue, with paging ("Load more") and the full body, properties and dead-letter reason of each message.
 - **Receive and delete**, always behind an explicit confirmation.
@@ -19,19 +19,18 @@ Explore Azure Service Bus queues from VS Code: peek and receive messages, send a
 1. Open the **Service Bus Workbench** view in the activity bar.
 2. Select **Add Connection** and pick how to connect:
    - **Connection string**: a namespace-level or queue-level shared access (SAS) connection string.
-   - **Microsoft Entra ID**: browse your subscriptions, or enter the namespace host name.
    - **Local emulator**: the Service Bus emulator on `localhost` with its default ports (5672 and 5300). Listing queues needs emulator 2.0 or later.
 3. Expand the connection, then a queue, and select **Messages** or **Dead-letter**.
 
 ## Permissions
 
-| To | Entra ID (RBAC role) | Connection string (claim) |
-|---|---|---|
-| List queues and see counts | Azure Service Bus Data Owner | Manage |
-| Peek / receive | Azure Service Bus Data Receiver | Listen |
-| Send | Azure Service Bus Data Sender | Send |
+The connection string needs these claims:
 
-Being Owner or Contributor of the resource does not give access to messages; the data roles are required.
+| To | Claim |
+|---|---|
+| List queues and see counts | Manage |
+| Peek / receive | Listen |
+| Send | Send |
 
 A connection string for a single queue (with `EntityPath`) works without the Manage claim: that queue is shown, without counts.
 
@@ -53,7 +52,7 @@ A connection string for a single queue (with `EntityPath`) works without the Man
 
 - Queues only; topics and subscriptions are not supported yet.
 - On session-enabled queues, peek and send work (set a Session ID), but receive and delete does not.
-- With Entra ID, only subscriptions of the account's default tenant are listed. For another tenant, use "enter the namespace host name" and provide the tenant ID.
+- Signing in with Microsoft Entra ID is not available yet; use a connection string.
 - A resend keeps the body, properties and IDs; it does not keep the time to live or the scheduled time.
 - With the emulator, counts are obtained by peeking and are shown as `100+` from 100 messages.
 
