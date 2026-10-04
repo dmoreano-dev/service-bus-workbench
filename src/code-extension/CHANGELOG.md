@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0
+
+Stable release of what the 0.7 pre-releases introduced.
+
+- Connection names are unique: a name that is already in use is refused, ignoring case, and a free one is proposed.
+- Sending, receiving or moving messages reloads only the queue or topic involved in the tree.
+- "Send Message" on a queue or topic whose compose form is already open focuses that tab and keeps the draft.
+- Sending a message with an empty body notes it in case it was an oversight.
+- Errors in the messages and send panels are shown in a box, with the explanation of what to fix first and the answer from Service Bus below it.
+
 ## 0.7.3 (pre-release)
 
 - Errors in the messages and send panels are shown in a box instead of plain red text, with the explanation of what to fix first and the answer from Service Bus below it.
