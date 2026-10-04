@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0 (pre-release)
+
+- Connection names are unique: adding a connection with a name that is already in use is refused, ignoring case. When the suggested name is taken, a free one is proposed.
+
 ## 0.6.0
 
 - Topics and subscriptions: they appear in the tree next to the queues, with their counts. Peek, receive and delete, and the dead-letter queue work on a subscription; sending works on a topic.

@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { parseServiceBusConnectionString } from '@azure/service-bus';
 import { VSCodeCredential } from '../auth/vscodeCredential';
 import { listNamespaces, listSubscriptions, listTenants, Subscription } from '../azure/arm';
+import { isNameTaken, uniqueName } from '../connections/connectionNames';
 import { ConnectionStore } from '../connections/connectionStore';
 import { describeError, isInvalidKey } from '../errors';
 import { ClientFactory } from '../serviceBus/clientFactory';
@@ -62,11 +63,16 @@ export async function addConnection(store: ConnectionStore, clients: ClientFacto
       return enterNamespace(store, clients, 'vscode');
     case 'default':
       return enterNamespace(store, clients, 'default');
-    case 'emulator':
+    case 'emulator': {
+      const name = await freeName(store, 'Local emulator');
+      if (!name) {
+        return;
+      }
       return store.add(
-        { id: randomUUID(), name: 'Local emulator', kind: 'connectionString', emulatorAdminPort: EMULATOR_ADMIN_PORT },
+        { id: randomUUID(), name, kind: 'connectionString', emulatorAdminPort: EMULATOR_ADMIN_PORT },
         EMULATOR_CONNECTION_STRING,
       );
+    }
   }
 }
 
@@ -91,7 +97,7 @@ async function addConnectionString(store: ConnectionStore, clients: ClientFactor
   }
   const parsed = parseServiceBusConnectionString(connectionString.trim());
   const host = parsed.fullyQualifiedNamespace.split('.')[0];
-  const name = await askName(parsed.entityPath ? `${host}/${parsed.entityPath}` : host);
+  const name = await askName(store, parsed.entityPath ? `${host}/${parsed.entityPath}` : host);
   if (!name) {
     return;
   }
@@ -153,9 +159,13 @@ async function browseNamespaces(store: ConnectionStore, clients: ClientFactory):
     if (!namespace) {
       return;
     }
+    const name = await freeName(store, namespace.namespace.name);
+    if (!name) {
+      return;
+    }
     await addChecked(store, clients, {
       id: randomUUID(),
-      name: namespace.namespace.name,
+      name,
       kind: 'entra',
       fullyQualifiedNamespace: namespace.namespace.fullyQualifiedNamespace,
       tenantId,
@@ -219,7 +229,7 @@ async function enterNamespace(
     return;
   }
   const fullyQualifiedNamespace = host.trim().toLowerCase();
-  const name = await askName(fullyQualifiedNamespace.split('.')[0]);
+  const name = await askName(store, fullyQualifiedNamespace.split('.')[0]);
   if (!name) {
     return;
   }
@@ -286,13 +296,26 @@ function isPort(value: string): boolean {
   return /^\d+$/.test(value.trim()) && port >= 1 && port <= 65535;
 }
 
-function askName(suggestion: string): Thenable<string | undefined> {
-  return vscode.window.showInputBox({
+/** Asks for the connection name. Two connections cannot share one: the tree and the history tell them apart by it. */
+async function askName(store: ConnectionStore, suggestion: string): Promise<string | undefined> {
+  const taken = store.list().map((c) => c.name);
+  const name = await vscode.window.showInputBox({
     title: 'Connection name',
-    value: suggestion,
+    value: uniqueName(taken, suggestion),
     ignoreFocusOut: true,
-    validateInput: (value) => (value.trim() ? undefined : 'Enter a name.'),
+    validateInput: (value) => {
+      if (!value.trim()) {
+        return 'Enter a name.';
+      }
+      return isNameTaken(taken, value) ? `A connection named "${value.trim()}" already exists.` : undefined;
+    },
   });
+  return name?.trim();
+}
+
+/** For the flows that name the connection themselves: asks only when that name is already in use. */
+async function freeName(store: ConnectionStore, name: string): Promise<string | undefined> {
+  return isNameTaken(store.list().map((c) => c.name), name) ? askName(store, name) : name;
 }
 
 function withProgress<T>(title: string, task: () => Promise<T>): Thenable<T> {

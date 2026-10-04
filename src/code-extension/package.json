@@ -2,7 +2,7 @@
   "name": "service-bus-workbench",
   "displayName": "Service Bus Workbench",
   "description": "Explore Azure Service Bus queues, topics and subscriptions: peek and receive messages, send and resend them, and keep a history of everything you sent.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "dmoreano-dev",
   "license": "MIT",
   "repository": {
