@@ -4,10 +4,7 @@
   const $ = (id) => document.getElementById(id);
   const TEXT_FIELDS = ['contentType', 'subject', 'messageId', 'correlationId', 'sessionId'];
 
-  function setStatus(text, isError) {
-    $('status').textContent = text || '';
-    $('status').classList.toggle('error', isError);
-  }
+  const setStatus = window.setStatus;
 
   /** Returns the parsed application properties, or throws with a message for the user. */
   function readApplicationProperties() {
@@ -86,7 +83,7 @@
         }
         break;
       case 'result':
-        setStatus(m.text, !m.ok);
+        setStatus(m.text, !m.ok, m.detail);
         break;
     }
   });

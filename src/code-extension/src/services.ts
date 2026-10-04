@@ -1,5 +1,5 @@
 import { ConnectionStore } from './connections/connectionStore';
-import { describeError } from './errors';
+import { DescribedError, explainError } from './errors';
 import { HistoryStore } from './history/historyStore';
 import { assertWritable } from './protection';
 import { ClientFactory } from './serviceBus/clientFactory';
@@ -38,9 +38,9 @@ export async function sendAndRecord(services: Services, request: SendRequest): P
     const { client } = await services.clients.get(connection);
     await send(client, queue, message);
   } catch (err) {
-    const error = describeError(err, 'send');
-    await services.history.add({ ...base, status: 'error', error });
-    throw new Error(error);
+    const error = new DescribedError(explainError(err, 'send'));
+    await services.history.add({ ...base, status: 'error', error: error.message });
+    throw error;
   }
   await services.history.add({ ...base, status: 'ok' });
   services.refreshTree(connection.id, queue);

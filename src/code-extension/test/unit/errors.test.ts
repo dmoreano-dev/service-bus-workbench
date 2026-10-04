@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeError, isInvalidKey, isUnauthorized } from '../../src/errors';
+import { DescribedError, describeError, explainError, isInvalidKey, isUnauthorized } from '../../src/errors';
 
 describe('describeError', () => {
   it('names the missing role and claim for each operation', () => {
@@ -53,6 +53,26 @@ describe('describeError', () => {
   it('never returns an empty text', () => {
     expect(describeError({ message: '', code: 'Weird' }, 'peek')).toBe('Unexpected error (Weird).');
     expect(describeError(undefined, 'peek')).not.toBe('');
+  });
+});
+
+describe('explainError', () => {
+  it('keeps the answer of the service apart from the explanation', () => {
+    const explained = explainError({ code: 'UnauthorizedAccess', message: "Unauthorized access. 'Send' claim(s) are required." }, 'send');
+    expect(explained.message).toMatch(/^Not authorized to send messages\..*Send claim\.$/);
+    expect(explained.detail).toBe("Unauthorized access. 'Send' claim(s) are required.");
+    expect(explainError({ code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND' }, 'peek').detail).toBe('getaddrinfo ENOTFOUND');
+  });
+
+  it('has no detail when the message of the service is all there is', () => {
+    expect(explainError(new Error('Queue not found.'), 'peek')).toEqual({ message: 'Queue not found.' });
+  });
+
+  it('returns an already explained error as it is', () => {
+    const explained = explainError({ code: 'UnauthorizedAccess', message: 'Unauthorized access.' }, 'send');
+    const error = new DescribedError(explained);
+    expect(error.message).toBe(describeError({ code: 'UnauthorizedAccess', message: 'Unauthorized access.' }, 'send'));
+    expect(explainError(error, 'peek')).toBe(explained);
   });
 });
 

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { ServiceBusReceivedMessage } from '@azure/service-bus';
-import { describeError } from '../errors';
+import { ErrorDescription, explainError } from '../errors';
 import { assertWritable, confirmDestructive } from '../protection';
 import {
   moveFromDeadLetter,
@@ -241,7 +241,7 @@ export class MessagesPanel {
     }
     this.post({ type: 'busy', busy: true, text: `Resending ${selected.length} message(s)…` });
     let sent = 0;
-    let failure: string | undefined;
+    let failure: ErrorDescription | undefined;
     for (const message of selected) {
       try {
         await sendAndRecord(this.services, {
@@ -254,13 +254,17 @@ export class MessagesPanel {
         sent++;
       } catch (err) {
         // Stop at the first failure: the rest would most likely fail the same way.
-        failure = err instanceof Error ? err.message : String(err);
+        failure = explainError(err, 'send');
         break;
       }
     }
     this.post({ type: 'busy', busy: false });
     if (failure) {
-      this.post({ type: 'error', text: `Resent ${sent} of ${selected.length} message(s), then stopped: ${failure}` });
+      this.post({
+        type: 'error',
+        text: `Resent ${sent} of ${selected.length} message(s), then stopped: ${failure.message}`,
+        detail: failure.detail,
+      });
     } else {
       this.post({ type: 'status', text: `Resent ${sent} message(s) to "${target}". Saved to history.` });
     }
@@ -293,7 +297,7 @@ export class MessagesPanel {
     }
     await this.run('receive', 'Moving messages back…', async () => {
       const { client } = await this.services.clients.get(this.connection);
-      let failure: string | undefined;
+      let failure: ErrorDescription | undefined;
       const forward = async (received: ServiceBusReceivedMessage) => {
         const view = toView(received);
         try {
@@ -306,7 +310,7 @@ export class MessagesPanel {
           });
         } catch (err) {
           // sendAndRecord already produced the text for the user.
-          failure = err instanceof Error ? err.message : String(err);
+          failure = explainError(err, 'send');
           throw err;
         }
       };
@@ -318,10 +322,8 @@ export class MessagesPanel {
       const pageSize = vscode.workspace.getConfiguration('serviceBusWorkbench').get<number>('peekBatchSize', 50);
       const remaining = await this.load(pageSize, false);
       if (result.error) {
-        this.post({
-          type: 'error',
-          text: `Moved ${result.moved} message(s), then stopped: ${failure ?? describeError(result.error, 'receive')}`,
-        });
+        const { message, detail } = failure ?? explainError(result.error, 'receive');
+        this.post({ type: 'error', text: `Moved ${result.moved} message(s), then stopped: ${message}`, detail });
         return;
       }
       const missing = result.missing > 0 ? ` ${result.missing} selected message(s) were no longer in the dead-letter queue.` : '';
@@ -337,7 +339,8 @@ export class MessagesPanel {
     try {
       await action();
     } catch (err) {
-      this.post({ type: 'error', text: describeError(err, operation) });
+      const { message: text, detail } = explainError(err, operation);
+      this.post({ type: 'error', text, detail });
     } finally {
       this.post({ type: 'busy', busy: false });
     }

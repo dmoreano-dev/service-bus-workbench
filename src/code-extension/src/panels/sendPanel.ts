@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { explainError } from '../errors';
 import { sendAndRecord, SendRequest, Services } from '../services';
 import { OutgoingMessage } from '../types';
 import { BANNER, protectionOf, renderHtml, webviewOptions } from '../webview/html';
@@ -22,8 +23,8 @@ ${BANNER}
   <div class="toolbar">
     <button id="send" type="submit" class="write">Send</button>
     <button id="format" type="button" class="secondary">Format JSON</button>
-    <span id="status" class="status"></span>
   </div>
+  <div id="status" class="status"></div>
 </form>`;
 
 /** Compose form. Every send, successful or failed, goes through sendAndRecord and lands in the history. */
@@ -94,7 +95,8 @@ export class SendPanel {
       const note = message.message.body === '' ? ' Note: the body was empty.' : '';
       this.post({ type: 'result', ok: true, text: `Sent at ${new Date().toLocaleTimeString()}. Saved to history.${note}` });
     } catch (err) {
-      this.post({ type: 'result', ok: false, text: err instanceof Error ? err.message : String(err) });
+      const { message: text, detail } = explainError(err, 'send');
+      this.post({ type: 'result', ok: false, text, detail });
     } finally {
       this.post({ type: 'busy', busy: false });
     }

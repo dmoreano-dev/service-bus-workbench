@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.3 (pre-release)
+
+- Errors in the messages and send panels are shown in a box instead of plain red text, with the explanation of what to fix first and the answer from Service Bus below it.
+- In the send form, the status is shown below the buttons instead of next to them.
+
 ## 0.7.2 (pre-release)
 
 - "Send Message" on a queue or topic whose compose form is already open focuses that tab instead of opening another one, and keeps the draft. Resending a message still opens its own tab.

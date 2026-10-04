@@ -37,22 +37,51 @@ export function isInvalidKey(err: unknown): boolean {
   return isUnauthorized(err) && INVALID_KEY.test(e.message ?? '');
 }
 
-/** Turns SDK errors into a message that tells the user what to fix. */
+/** An error explained for the user: `message` says what to fix and `detail` is what the service answered, when it adds something. */
+export interface ErrorDescription {
+  message: string;
+  detail?: string;
+}
+
+/** A failure that was already explained. Its `message` is the whole text, for callers that can only show one string. */
+export class DescribedError extends Error {
+  constructor(readonly description: ErrorDescription) {
+    super(joinDescription(description));
+  }
+}
+
+function joinDescription({ message, detail }: ErrorDescription): string {
+  return detail ? `${message} (${detail})` : message;
+}
+
+/** Turns SDK errors into a single message that tells the user what to fix, with the service's answer in parentheses. */
 export function describeError(error: unknown, operation: Operation): string {
+  return joinDescription(explainError(error, operation));
+}
+
+/** Like describeError, but keeps the service's answer apart so a panel can show it as secondary text. */
+export function explainError(error: unknown, operation: Operation): ErrorDescription {
+  if (error instanceof DescribedError) {
+    return error.description;
+  }
   const err = lastAttempt(error);
   const e = (err ?? {}) as { code?: string; statusCode?: number; message?: string; name?: string };
   // Never return an empty text: the panel would show nothing and the failure would go unnoticed.
   const message = firstLine(e.message ?? String(err)) || `Unexpected error (${e.code ?? e.name ?? 'unknown'}).`;
   if (isInvalidKey(err)) {
-    return `The key or key name of the connection string is not valid. Check that it was copied in full. (${message})`;
+    return { message: 'The key or key name of the connection string is not valid. Check that it was copied in full.', detail: message };
   }
   if (isUnauthorized(err)) {
-    return `${PERMISSION_HINT[operation]} (${message})`;
+    return { message: PERMISSION_HINT[operation], detail: message };
   }
   if (e.code && UNREACHABLE_CODES.has(e.code)) {
-    return `Cannot reach the namespace. Check the host name and your network; if port 5671 is blocked, enable "Service Bus Workbench: Use Web Sockets". (${message})`;
+    return {
+      message:
+        'Cannot reach the namespace. Check the host name and your network; if port 5671 is blocked, enable "Service Bus Workbench: Use Web Sockets".',
+      detail: message,
+    };
   }
-  return message;
+  return { message };
 }
 
 /** The first line of an SDK message, without the tracking data Service Bus appends: it is noise in a dialog. */

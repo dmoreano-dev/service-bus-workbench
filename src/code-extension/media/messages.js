@@ -70,15 +70,10 @@
         }
         break;
       case 'error':
-        setStatus(m.text, true);
+        setStatus(m.text, true, m.detail);
         break;
     }
   });
-
-  function setStatus(text, isError) {
-    $('status').textContent = text || '';
-    $('status').classList.toggle('error', isError);
-  }
 
   function updateButtons() {
     for (const button of document.querySelectorAll('button')) {
