@@ -1,8 +1,8 @@
 {
   "name": "service-bus-workbench",
   "displayName": "Service Bus Workbench",
-  "description": "Explore Azure Service Bus queues: peek and receive messages, send and resend them, and keep a history of everything you sent.",
-  "version": "0.4.0",
+  "description": "Explore Azure Service Bus queues, topics and subscriptions: peek and receive messages, send and resend them, and keep a history of everything you sent.",
+  "version": "0.6.0",
   "publisher": "dmoreano-dev",
   "license": "MIT",
   "repository": {
@@ -19,6 +19,8 @@
     "service bus",
     "servicebus",
     "queue",
+    "topic",
+    "subscription",
     "dead-letter",
     "messaging",
     "emulator"
@@ -83,6 +85,16 @@
         "category": "Service Bus"
       },
       {
+        "command": "sbw.enableReadOnly",
+        "title": "Enable Read-only Mode",
+        "category": "Service Bus"
+      },
+      {
+        "command": "sbw.disableReadOnly",
+        "title": "Disable Read-only Mode",
+        "category": "Service Bus"
+      },
+      {
         "command": "sbw.openMessages",
         "title": "Peek Messages",
         "category": "Service Bus"
@@ -119,6 +131,24 @@
         "title": "Clear Sent History",
         "category": "Service Bus",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "sbw.history.search",
+        "title": "Search Sent History…",
+        "category": "Service Bus",
+        "icon": "$(search)"
+      },
+      {
+        "command": "sbw.history.clearSearch",
+        "title": "Clear Sent History Search",
+        "category": "Service Bus",
+        "icon": "$(search-stop)"
+      },
+      {
+        "command": "sbw.history.groupBy",
+        "title": "Group Sent History…",
+        "category": "Service Bus",
+        "icon": "$(list-tree)"
       }
     ],
     "menus": {
@@ -134,34 +164,60 @@
           "group": "navigation@2"
         },
         {
+          "command": "sbw.history.search",
+          "when": "view == sbw.history",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sbw.history.clearSearch",
+          "when": "view == sbw.history && sbw.history.filtered",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sbw.history.groupBy",
+          "when": "view == sbw.history",
+          "group": "navigation@3"
+        },
+        {
           "command": "sbw.history.clear",
           "when": "view == sbw.history",
-          "group": "navigation"
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
         {
+          "command": "sbw.enableReadOnly",
+          "when": "view == sbw.connections && viewItem =~ /^connection(?!.*\\.readOnly)/",
+          "group": "1_protection"
+        },
+        {
+          "command": "sbw.disableReadOnly",
+          "when": "view == sbw.connections && viewItem =~ /^connection.*\\.readOnly/",
+          "group": "1_protection"
+        },
+        {
           "command": "sbw.removeConnection",
-          "when": "view == sbw.connections && viewItem == connection"
+          "when": "view == sbw.connections && viewItem =~ /^connection/",
+          "group": "2_danger"
         },
         {
           "command": "sbw.sendMessage",
-          "when": "view == sbw.connections && viewItem == queue",
+          "when": "view == sbw.connections && viewItem =~ /^(queue|topic)$/",
           "group": "inline"
         },
         {
           "command": "sbw.sendMessage",
-          "when": "view == sbw.connections && viewItem == queue",
+          "when": "view == sbw.connections && viewItem =~ /^(queue|topic)$/",
           "group": "1_actions@1"
         },
         {
           "command": "sbw.openMessages",
-          "when": "view == sbw.connections && viewItem == queue",
+          "when": "view == sbw.connections && viewItem =~ /^(queue|subscription)$/",
           "group": "1_actions@2"
         },
         {
           "command": "sbw.openDeadLetter",
-          "when": "view == sbw.connections && viewItem == queue",
+          "when": "view == sbw.connections && viewItem =~ /^(queue|subscription)$/",
           "group": "1_actions@3"
         },
         {
@@ -213,6 +269,18 @@
         {
           "command": "sbw.history.delete",
           "when": "false"
+        },
+        {
+          "command": "sbw.enableReadOnly",
+          "when": "false"
+        },
+        {
+          "command": "sbw.disableReadOnly",
+          "when": "false"
+        },
+        {
+          "command": "sbw.history.clearSearch",
+          "when": "sbw.history.filtered"
         }
       ]
     },
@@ -241,6 +309,21 @@
           "default": 500,
           "minimum": 1,
           "description": "Maximum number of entries kept in the sent history. Oldest entries are dropped first."
+        },
+        "serviceBusWorkbench.history.groupBy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "queue",
+            "day"
+          ],
+          "enumDescriptions": [
+            "One list, newest first.",
+            "One group per queue or topic and connection.",
+            "One group per day."
+          ],
+          "default": "none",
+          "description": "How the Sent History view groups its entries."
         }
       }
     }
@@ -253,10 +336,13 @@
     "vscode:prepublish": "node -e \"require('fs').copyFileSync('../../LICENSE','LICENSE')\" && npm run package",
     "seed:local": "node scripts/seed-local.mjs",
     "host": "node esbuild.js && node scripts/launch-host.mjs",
-    "vsix": "vsce package --no-dependencies"
+    "vsix": "vsce package --no-dependencies",
+    "test": "vitest run test/unit",
+    "test:integration": "vitest run test/integration"
   },
   "dependencies": {
     "@azure/core-auth": "^1.9.0",
+    "@azure/identity": "^4.13.3",
     "@azure/service-bus": "^7.9.5",
     "long": "^5.3.2",
     "ws": "^8.18.0"
@@ -267,6 +353,7 @@
     "@types/ws": "^8.5.12",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.25.12",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.7"
   }
 }

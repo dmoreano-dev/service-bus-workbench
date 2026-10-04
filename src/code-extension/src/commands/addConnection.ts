@@ -4,8 +4,11 @@ import { parseServiceBusConnectionString } from '@azure/service-bus';
 import { VSCodeCredential } from '../auth/vscodeCredential';
 import { listNamespaces, listSubscriptions, listTenants, Subscription } from '../azure/arm';
 import { ConnectionStore } from '../connections/connectionStore';
+import { describeError, isInvalidKey } from '../errors';
+import { ClientFactory } from '../serviceBus/clientFactory';
+import { ConnectionConfig } from '../types';
 
-type Method = 'connectionString' | 'browse' | 'manual' | 'emulator';
+type Method = 'connectionString' | 'browse' | 'manual' | 'default' | 'emulator';
 
 const EMULATOR_CONNECTION_STRING =
   'Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;';
@@ -15,10 +18,10 @@ const EMULATOR_ADMIN_PORT = 5300;
  * already exist keep working; only adding new ones is turned off.
  */
 const ENTRA_ID_ENABLED: boolean = true;
-const ENTRA_ID_METHODS: Method[] = ['browse', 'manual'];
+const ENTRA_ID_METHODS: Method[] = ['browse', 'manual', 'default'];
 const isEmulator = (connectionString: string) => /UseDevelopmentEmulator\s*=\s*true/i.test(connectionString);
 
-export async function addConnection(store: ConnectionStore): Promise<void> {
+export async function addConnection(store: ConnectionStore, clients: ClientFactory): Promise<void> {
   const methods: (vscode.QuickPickItem & { method: Method })[] = [
     {
       method: 'connectionString',
@@ -36,6 +39,11 @@ export async function addConnection(store: ConnectionStore): Promise<void> {
       detail: 'Use this when you have data roles on a namespace but cannot see its subscription',
     },
     {
+      method: 'default',
+      label: '$(terminal) Microsoft Entra ID: Azure CLI or environment credentials',
+      detail: 'Uses DefaultAzureCredential: az login, azd, environment variables, managed identity…',
+    },
+    {
       method: 'emulator',
       label: '$(vm) Local emulator',
       detail: 'Service Bus emulator on localhost with its default ports (5672 and 5300)',
@@ -47,11 +55,13 @@ export async function addConnection(store: ConnectionStore): Promise<void> {
   );
   switch (method?.method) {
     case 'connectionString':
-      return addConnectionString(store);
+      return addConnectionString(store, clients);
     case 'browse':
-      return browseNamespaces(store);
+      return browseNamespaces(store, clients);
     case 'manual':
-      return enterNamespace(store);
+      return enterNamespace(store, clients, 'vscode');
+    case 'default':
+      return enterNamespace(store, clients, 'default');
     case 'emulator':
       return store.add(
         { id: randomUUID(), name: 'Local emulator', kind: 'connectionString', emulatorAdminPort: EMULATOR_ADMIN_PORT },
@@ -60,7 +70,7 @@ export async function addConnection(store: ConnectionStore): Promise<void> {
   }
 }
 
-async function addConnectionString(store: ConnectionStore): Promise<void> {
+async function addConnectionString(store: ConnectionStore, clients: ClientFactory): Promise<void> {
   const connectionString = await vscode.window.showInputBox({
     title: 'Service Bus connection string',
     prompt: 'Stored in VS Code secret storage, never in settings.',
@@ -85,19 +95,36 @@ async function addConnectionString(store: ConnectionStore): Promise<void> {
   if (!name) {
     return;
   }
-  await store.add(
+  let emulatorAdminPort: number | undefined;
+  if (isEmulator(connectionString)) {
+    const port = await vscode.window.showInputBox({
+      title: 'Emulator management port',
+      prompt: `HTTP port of the emulator's management API on ${parsed.fullyQualifiedNamespace.split(':')[0]}, used to list queues and topics.`,
+      value: String(EMULATOR_ADMIN_PORT),
+      ignoreFocusOut: true,
+      validateInput: (value) => (isPort(value) ? undefined : 'Enter a port number between 1 and 65535.'),
+    });
+    if (!port) {
+      return;
+    }
+    emulatorAdminPort = Number(port);
+  }
+  await addChecked(
+    store,
+    clients,
     {
       id: randomUUID(),
       name,
       kind: 'connectionString',
       entityPath: parsed.entityPath,
-      emulatorAdminPort: isEmulator(connectionString) ? EMULATOR_ADMIN_PORT : undefined,
+      emulatorAdminPort,
     },
+    parsed.fullyQualifiedNamespace,
     connectionString.trim(),
   );
 }
 
-async function browseNamespaces(store: ConnectionStore): Promise<void> {
+async function browseNamespaces(store: ConnectionStore, clients: ClientFactory): Promise<void> {
   try {
     const subscriptions = await withProgress('Loading Azure subscriptions…', listAllSubscriptions);
     if (subscriptions.length === 0) {
@@ -126,13 +153,14 @@ async function browseNamespaces(store: ConnectionStore): Promise<void> {
     if (!namespace) {
       return;
     }
-    await store.add({
+    await addChecked(store, clients, {
       id: randomUUID(),
       name: namespace.namespace.name,
       kind: 'entra',
       fullyQualifiedNamespace: namespace.namespace.fullyQualifiedNamespace,
       tenantId,
-    });
+      resourceId: namespace.namespace.id,
+    }, namespace.namespace.fullyQualifiedNamespace);
   } catch (err) {
     void vscode.window.showErrorMessage(`Could not browse Azure: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -164,7 +192,11 @@ async function listAllSubscriptions(): Promise<Subscription[]> {
   return [...found.values()];
 }
 
-async function enterNamespace(store: ConnectionStore): Promise<void> {
+async function enterNamespace(
+  store: ConnectionStore,
+  clients: ClientFactory,
+  credential: 'vscode' | 'default',
+): Promise<void> {
   const host = await vscode.window.showInputBox({
     title: 'Namespace host name',
     placeHolder: 'my-namespace.servicebus.windows.net',
@@ -177,7 +209,10 @@ async function enterNamespace(store: ConnectionStore): Promise<void> {
   }
   const tenantId = await vscode.window.showInputBox({
     title: 'Tenant ID (optional)',
-    prompt: 'Leave empty to use the default tenant of your signed-in account.',
+    prompt:
+      credential === 'default'
+        ? 'Leave empty to use the tenant of your Azure CLI or environment credentials.'
+        : 'Leave empty to use the default tenant of your signed-in account.',
     ignoreFocusOut: true,
   });
   if (tenantId === undefined) {
@@ -188,13 +223,67 @@ async function enterNamespace(store: ConnectionStore): Promise<void> {
   if (!name) {
     return;
   }
-  await store.add({
+  await addChecked(store, clients, {
     id: randomUUID(),
     name,
     kind: 'entra',
     fullyQualifiedNamespace,
     tenantId: tenantId.trim() || undefined,
-  });
+    credential,
+  }, fullyQualifiedNamespace);
+}
+
+/**
+ * Saves a connection after checking that it works. A host name or a well-formed connection string
+ * proves nothing: without this, a connection with no access, a wrong key or a namespace that does
+ * not exist would be saved and only fail when expanded.
+ */
+async function addChecked(
+  store: ConnectionStore,
+  clients: ClientFactory,
+  connection: ConnectionConfig,
+  host: string,
+  connectionString?: string,
+): Promise<void> {
+  // A connection string for a single queue cannot list the namespace, so it is checked by peeking that queue.
+  const scopedQueue = connection.kind === 'connectionString' ? connection.entityPath : undefined;
+  try {
+    await withProgress(`Checking access to ${host}…`, () => clients.probe(connection, connectionString));
+  } catch (err) {
+    // The native dialog is narrow and cannot be resized: keep the headline short and put the host in the detail.
+    const message =
+      connection.kind === 'entra'
+        ? 'This account could not access the namespace.'
+        : 'Could not connect with this connection string.';
+    const target = scopedQueue ? `Queue "${scopedQueue}" of ${host}` : host;
+    const reason = `${target}\n\n${describeError(err, scopedQueue ? 'peek' : 'list')}`;
+    if (isInvalidKey(err)) {
+      // Nothing outside the connection string can make it work later, so it is not offered to add it anyway.
+      void vscode.window.showErrorMessage(message, { modal: true, detail: reason });
+      return;
+    }
+    const hint =
+      connection.kind === 'entra'
+        ? 'Add the connection anyway if the role was assigned a moment ago: it can take a few minutes to apply.'
+        : scopedQueue
+          ? 'Add the connection anyway if its key only has the Send claim.'
+          : 'Add the connection anyway if you expect it to work later.';
+    const confirm = 'Add Anyway';
+    const answer = await vscode.window.showWarningMessage(
+      message,
+      { modal: true, detail: `${reason}\n\n${hint}` },
+      confirm,
+    );
+    if (answer !== confirm) {
+      return;
+    }
+  }
+  await store.add(connection, connectionString);
+}
+
+function isPort(value: string): boolean {
+  const port = Number(value);
+  return /^\d+$/.test(value.trim()) && port >= 1 && port <= 65535;
 }
 
 function askName(suggestion: string): Thenable<string | undefined> {

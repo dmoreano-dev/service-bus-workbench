@@ -67,6 +67,7 @@
         $('target').textContent = m.target;
         $('origin').textContent = m.origin;
         $('origin').classList.toggle('hidden', !m.origin);
+        window.applyProtection(m);
         $('body').value = m.message.body || '';
         for (const field of TEXT_FIELDS) {
           $(field).value = m.message[field] || '';
@@ -75,6 +76,9 @@
         $('applicationProperties').value = props && Object.keys(props).length ? JSON.stringify(props, null, 2) : '';
         break;
       }
+      case 'protection':
+        window.applyProtection(m);
+        break;
       case 'busy':
         $('send').disabled = m.busy;
         if (m.busy) {

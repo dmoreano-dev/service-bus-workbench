@@ -7,9 +7,16 @@ import { MessagesPanel } from './panels/messagesPanel';
 import { SendPanel } from './panels/sendPanel';
 import { ClientFactory } from './serviceBus/clientFactory';
 import { sendAndRecord, Services } from './services';
-import { SubQueue } from './types';
-import { ConnectionNode, ConnectionsTreeProvider, QueueNode, SubQueueNode } from './views/connectionsTree';
-import { HistoryNode, HistoryTreeProvider } from './views/historyTree';
+import { ConnectionProtection, SubQueue } from './types';
+import {
+  ConnectionNode,
+  ConnectionsTreeProvider,
+  QueueNode,
+  SubQueueNode,
+  SubscriptionNode,
+  TopicNode,
+} from './views/connectionsTree';
+import { HistoryGrouping, HistoryNode, HistoryTreeProvider } from './views/historyTree';
 
 let clients: ClientFactory | undefined;
 
@@ -19,7 +26,13 @@ export function activate(context: vscode.ExtensionContext): void {
   clients = new ClientFactory(connections);
   const factory = clients;
 
-  const services: Services = { connections, clients: factory, history, refreshTree: () => tree.refresh() };
+  // A bulk resend or a move sends many messages in a row; reload the tree once they settle.
+  let refreshTimer: NodeJS.Timeout | undefined;
+  const refreshTree = () => {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => tree.refresh(), 300);
+  };
+  const services: Services = { connections, clients: factory, history, refreshTree };
   const tree = new ConnectionsTreeProvider(services);
   const historyTree = new HistoryTreeProvider(history);
 
@@ -27,8 +40,23 @@ export function activate(context: vscode.ExtensionContext): void {
     reloadOnRebuild(context);
   }
 
-  const openMessages = (node: QueueNode | SubQueueNode, subQueue: SubQueue) =>
-    MessagesPanel.show(services, context.extensionUri, node.connection, node.queue.name, subQueue);
+  type MessagesNode = QueueNode | SubscriptionNode | SubQueueNode;
+  const openMessages = (node: MessagesNode, subQueue: SubQueue) =>
+    MessagesPanel.show(services, context.extensionUri, node.connection, node.source, subQueue);
+
+  const historyView = vscode.window.createTreeView('sbw.history', { treeDataProvider: historyTree });
+  const showHistoryFilter = async () => {
+    const filter = historyTree.filter;
+    void vscode.commands.executeCommand('setContext', 'sbw.history.filtered', filter !== '');
+    if (!filter) {
+      historyView.message = undefined;
+      return;
+    }
+    const { shown, total } = await historyTree.counts();
+    historyView.message = `Filter: "${filter}" · ${shown} of ${total}`;
+  };
+  const protect = (protection: ConnectionProtection) => (node: ConnectionNode) =>
+    connections.update(node.connection.id, protection);
 
   const resolveHistory = async (node: HistoryNode) => {
     const connection = connections.get(node.entry.connectionId);
@@ -43,10 +71,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('sbw.connections', tree),
-    vscode.window.registerTreeDataProvider('sbw.history', historyTree),
+    historyView,
+    history.onDidChange(() => void showHistoryFilter()),
     connections.onDidChange(() => tree.refresh()),
 
-    vscode.commands.registerCommand('sbw.addConnection', () => addConnection(connections)),
+    vscode.commands.registerCommand('sbw.addConnection', () => addConnection(connections, factory)),
     vscode.commands.registerCommand('sbw.refresh', () => tree.refresh()),
     vscode.commands.registerCommand('sbw.removeConnection', async (node: ConnectionNode) => {
       const confirm = 'Remove';
@@ -60,14 +89,14 @@ export function activate(context: vscode.ExtensionContext): void {
         await connections.remove(node.connection.id);
       }
     }),
-    vscode.commands.registerCommand('sbw.openMessages', (node: QueueNode | SubQueueNode) => openMessages(node, 'active')),
-    vscode.commands.registerCommand('sbw.openDeadLetter', (node: QueueNode | SubQueueNode) =>
-      openMessages(node, 'deadLetter'),
-    ),
-    vscode.commands.registerCommand('sbw.sendMessage', (node: QueueNode) =>
+    vscode.commands.registerCommand('sbw.enableReadOnly', protect({ readOnly: true })),
+    vscode.commands.registerCommand('sbw.disableReadOnly', protect({ readOnly: false })),
+    vscode.commands.registerCommand('sbw.openMessages', (node: MessagesNode) => openMessages(node, 'active')),
+    vscode.commands.registerCommand('sbw.openDeadLetter', (node: MessagesNode) => openMessages(node, 'deadLetter')),
+    vscode.commands.registerCommand('sbw.sendMessage', (node: QueueNode | TopicNode) =>
       SendPanel.show(services, context.extensionUri, {
         connection: node.connection,
-        queue: node.queue.name,
+        queue: node.sendTarget,
         kind: 'send',
         message: { body: '', contentType: 'application/json' },
       }),
@@ -100,6 +129,37 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.window.showErrorMessage(err instanceof Error ? err.message : String(err));
       }
     }),
+    vscode.commands.registerCommand('sbw.history.search', async () => {
+      const query = await vscode.window.showInputBox({
+        title: 'Search sent history',
+        prompt: 'Matches the queue or topic, connection, subject, IDs, properties and body. Leave empty to show everything.',
+        value: historyTree.filter,
+      });
+      if (query !== undefined) {
+        historyTree.setFilter(query);
+        await showHistoryFilter();
+      }
+    }),
+    vscode.commands.registerCommand('sbw.history.clearSearch', async () => {
+      historyTree.setFilter('');
+      await showHistoryFilter();
+    }),
+    vscode.commands.registerCommand('sbw.history.groupBy', async () => {
+      const config = vscode.workspace.getConfiguration('serviceBusWorkbench.history');
+      const current = config.get<HistoryGrouping>('groupBy', 'none');
+      const options: (vscode.QuickPickItem & { grouping: HistoryGrouping })[] = [
+        { grouping: 'none', label: 'No grouping', detail: 'One list, newest first' },
+        { grouping: 'queue', label: 'By queue or topic', detail: 'One group per destination and connection' },
+        { grouping: 'day', label: 'By day', detail: 'One group per day' },
+      ];
+      const picked = await vscode.window.showQuickPick(
+        options.map((o) => ({ ...o, description: o.grouping === current ? 'current' : undefined })),
+        { title: 'Group sent history' },
+      );
+      if (picked) {
+        await config.update('groupBy', picked.grouping, vscode.ConfigurationTarget.Global);
+      }
+    }),
     vscode.commands.registerCommand('sbw.history.delete', (node: HistoryNode) => history.remove(node.entry.id)),
     vscode.commands.registerCommand('sbw.history.clear', async () => {
       const confirm = 'Clear History';
@@ -119,7 +179,11 @@ export function activate(context: vscode.ExtensionContext): void {
         await factory.dispose();
         tree.refresh();
       }
+      if (e.affectsConfiguration('serviceBusWorkbench.history.groupBy')) {
+        historyTree.refresh();
+      }
     }),
+    { dispose: () => clearTimeout(refreshTimer) },
   );
 }
 

@@ -23,6 +23,7 @@ h2 {
 .toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -231,4 +232,23 @@ pre {
   to {
     transform: rotate(360deg);
   }
+}
+
+.banner {
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--vscode-inputValidation-warningBorder);
+  background: var(--vscode-inputValidation-warningBackground);
+  font-weight: 600;
+}
+
+.read-only .write {
+  display: none;
+}
+
+th.check,
+td.check {
+  width: 24px;
+  padding-right: 0;
+  cursor: default;
 }

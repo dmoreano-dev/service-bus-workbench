@@ -1,54 +1,117 @@
 import * as vscode from 'vscode';
 import { describeError } from '../errors';
 import { Services } from '../services';
-import { ConnectionConfig, QueueInfo, SubQueue } from '../types';
+import { ConnectionConfig, MessageSource, QueueInfo, SubQueue, SubscriptionInfo, TopicInfo } from '../types';
 
-function formatCount(count: number | undefined, queue: QueueInfo): string {
+/** The message counts of a queue or a subscription. */
+type Counts = Pick<QueueInfo, 'activeMessageCount' | 'deadLetterMessageCount' | 'countCap'>;
+
+function formatCount(count: number | undefined, counts: Counts): string {
   const value = count ?? 0;
-  return queue.countCap !== undefined && value >= queue.countCap ? `${queue.countCap}+` : String(value);
+  return counts.countCap !== undefined && value >= counts.countCap ? `${counts.countCap}+` : String(value);
+}
+
+function describeCounts(counts: Counts): string | undefined {
+  if (counts.activeMessageCount === undefined) {
+    return undefined;
+  }
+  return `${formatCount(counts.activeMessageCount, counts)} active · ${formatCount(counts.deadLetterMessageCount, counts)} dead-letter`;
 }
 
 export class ConnectionNode extends vscode.TreeItem {
   constructor(readonly connection: ConnectionConfig) {
     super(connection.name, vscode.TreeItemCollapsibleState.Collapsed);
-    this.contextValue = 'connection';
+    // Menus match on the suffix to offer the right read-only toggle.
+    this.contextValue = `connection${connection.readOnly ? '.readOnly' : ''}`;
+    let icon: string;
+    let kind: string;
     if (connection.kind === 'entra') {
-      this.iconPath = new vscode.ThemeIcon('azure');
-      this.description = 'Entra ID';
+      icon = 'azure';
+      kind = connection.credential === 'default' ? 'Entra ID (Azure CLI / environment)' : 'Entra ID';
       this.tooltip = connection.fullyQualifiedNamespace;
     } else if (connection.emulatorAdminPort !== undefined) {
-      this.iconPath = new vscode.ThemeIcon('vm');
-      this.description = 'Emulator';
+      icon = 'vm';
+      kind = 'Emulator';
     } else {
-      this.iconPath = new vscode.ThemeIcon('key');
-      this.description = 'Connection string';
+      icon = 'key';
+      kind = 'Connection string';
     }
+    this.iconPath = new vscode.ThemeIcon(icon);
+    this.description = connection.readOnly ? `read-only · ${kind}` : kind;
+  }
+}
+
+/** Groups the queues or the topics of a namespace. */
+export class GroupNode extends vscode.TreeItem {
+  constructor(
+    readonly connection: ConnectionConfig,
+    readonly group: 'queues' | 'topics',
+  ) {
+    super(group === 'queues' ? 'Queues' : 'Topics', vscode.TreeItemCollapsibleState.Expanded);
+    this.iconPath = new vscode.ThemeIcon('folder');
   }
 }
 
 export class QueueNode extends vscode.TreeItem {
+  readonly source: MessageSource;
+  /** The entity a message is sent to from this node. */
+  readonly sendTarget: string;
+
   constructor(
     readonly connection: ConnectionConfig,
     readonly queue: QueueInfo,
   ) {
     super(queue.name, vscode.TreeItemCollapsibleState.Collapsed);
+    this.source = { queue: queue.name };
+    this.sendTarget = queue.name;
     this.contextValue = 'queue';
     this.iconPath = new vscode.ThemeIcon('inbox');
-    if (queue.activeMessageCount !== undefined) {
-      this.description = `${formatCount(queue.activeMessageCount, queue)} active · ${formatCount(queue.deadLetterMessageCount, queue)} dead-letter`;
+    this.description = describeCounts(queue);
+  }
+}
+
+export class TopicNode extends vscode.TreeItem {
+  readonly sendTarget: string;
+
+  constructor(
+    readonly connection: ConnectionConfig,
+    readonly topic: TopicInfo,
+  ) {
+    super(topic.name, vscode.TreeItemCollapsibleState.Collapsed);
+    this.sendTarget = topic.name;
+    this.contextValue = 'topic';
+    this.iconPath = new vscode.ThemeIcon('broadcast');
+    if (topic.subscriptionCount !== undefined) {
+      this.description = `${topic.subscriptionCount} subscription${topic.subscriptionCount === 1 ? '' : 's'}`;
     }
+  }
+}
+
+export class SubscriptionNode extends vscode.TreeItem {
+  readonly source: MessageSource;
+
+  constructor(
+    readonly connection: ConnectionConfig,
+    readonly subscription: SubscriptionInfo,
+  ) {
+    super(subscription.name, vscode.TreeItemCollapsibleState.Collapsed);
+    this.source = { topic: subscription.topic, subscription: subscription.name };
+    this.contextValue = 'subscription';
+    this.iconPath = new vscode.ThemeIcon('inbox');
+    this.description = describeCounts(subscription);
   }
 }
 
 export class SubQueueNode extends vscode.TreeItem {
   constructor(
     readonly connection: ConnectionConfig,
-    readonly queue: QueueInfo,
+    readonly source: MessageSource,
+    counts: Counts,
     readonly subQueue: SubQueue,
   ) {
     super(subQueue === 'active' ? 'Messages' : 'Dead-letter', vscode.TreeItemCollapsibleState.None);
-    const count = subQueue === 'active' ? queue.activeMessageCount : queue.deadLetterMessageCount;
-    this.description = count === undefined ? undefined : formatCount(count, queue);
+    const count = subQueue === 'active' ? counts.activeMessageCount : counts.deadLetterMessageCount;
+    this.description = count === undefined ? undefined : formatCount(count, counts);
     this.iconPath = new vscode.ThemeIcon(subQueue === 'active' ? 'mail' : 'warning');
     this.command = {
       command: subQueue === 'active' ? 'sbw.openMessages' : 'sbw.openDeadLetter',
@@ -66,7 +129,7 @@ class InfoNode extends vscode.TreeItem {
   }
 }
 
-type Node = ConnectionNode | QueueNode | SubQueueNode | InfoNode;
+type Node = ConnectionNode | GroupNode | QueueNode | TopicNode | SubscriptionNode | SubQueueNode | InfoNode;
 
 export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly emitter = new vscode.EventEmitter<void>();
@@ -87,33 +150,75 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Node> {
       return this.services.connections.list().map((c) => new ConnectionNode(c));
     }
     if (node instanceof ConnectionNode) {
-      return this.loadQueues(node.connection);
+      const { connection } = node;
+      if (connection.kind === 'connectionString' && connection.entityPath) {
+        return this.load(() => this.loadScopedQueue(connection, connection.entityPath!));
+      }
+      return [new GroupNode(connection, 'queues'), new GroupNode(connection, 'topics')];
+    }
+    if (node instanceof GroupNode) {
+      return this.load(() => (node.group === 'queues' ? this.loadQueues(node.connection) : this.loadTopics(node.connection)));
+    }
+    if (node instanceof TopicNode) {
+      return this.load(() => this.loadSubscriptions(node.connection, node.topic.name));
     }
     if (node instanceof QueueNode) {
-      return [
-        new SubQueueNode(node.connection, node.queue, 'active'),
-        new SubQueueNode(node.connection, node.queue, 'deadLetter'),
-      ];
+      return subQueues(node.connection, node.source, node.queue);
+    }
+    if (node instanceof SubscriptionNode) {
+      return subQueues(node.connection, node.source, node.subscription);
     }
     return [];
   }
 
-  private async loadQueues(connection: ConnectionConfig): Promise<Node[]> {
+  /** Runs a listing and turns a failure into a single node that explains it. */
+  private async load(list: () => Promise<Node[]>): Promise<Node[]> {
     try {
-      const { admin } = await this.services.clients.get(connection);
-      if (connection.kind === 'connectionString' && connection.entityPath) {
-        // A queue-scoped connection string can't list the namespace, and may not be able to read counts either.
-        const queue = await admin.getQueue(connection.entityPath).catch(() => ({ name: connection.entityPath! }));
-        return [new QueueNode(connection, queue)];
-      }
-      const queues = await admin.listQueues();
-      if (queues.length === 0) {
-        return [new InfoNode('No queues in this namespace', 'info')];
-      }
-      return queues.map((q) => new QueueNode(connection, q));
+      return await list();
     } catch (err) {
       const message = describeError(err, 'list');
       return [new InfoNode(message, 'error', message)];
     }
   }
+
+  private async loadScopedQueue(connection: ConnectionConfig, entityPath: string): Promise<Node[]> {
+    const { admin } = await this.services.clients.get(connection);
+    // A queue-scoped connection string can't list the namespace, and may not be able to read counts either.
+    const queue = await admin.getQueue(entityPath).catch(() => ({ name: entityPath }));
+    return [new QueueNode(connection, queue)];
+  }
+
+  private async loadQueues(connection: ConnectionConfig): Promise<Node[]> {
+    const { admin } = await this.services.clients.get(connection);
+    const queues = await admin.listQueues();
+    if (queues.length === 0) {
+      return [new InfoNode('No queues in this namespace', 'info')];
+    }
+    return queues.map((q) => new QueueNode(connection, q));
+  }
+
+  private async loadTopics(connection: ConnectionConfig): Promise<Node[]> {
+    const { admin } = await this.services.clients.get(connection);
+    const topics = await admin.listTopics();
+    if (topics.length === 0) {
+      return [new InfoNode('No topics in this namespace', 'info')];
+    }
+    return topics.map((t) => new TopicNode(connection, t));
+  }
+
+  private async loadSubscriptions(connection: ConnectionConfig, topic: string): Promise<Node[]> {
+    const { admin } = await this.services.clients.get(connection);
+    const subscriptions = await admin.listSubscriptions(topic);
+    if (subscriptions.length === 0) {
+      return [new InfoNode('No subscriptions in this topic', 'info')];
+    }
+    return subscriptions.map((s) => new SubscriptionNode(connection, s));
+  }
+}
+
+function subQueues(connection: ConnectionConfig, source: MessageSource, counts: Counts): Node[] {
+  return [
+    new SubQueueNode(connection, source, counts, 'active'),
+    new SubQueueNode(connection, source, counts, 'deadLetter'),
+  ];
 }

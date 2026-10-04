@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { groupEntries, matchesQuery } from '../history/historyQuery';
 import { HistoryStore } from '../history/historyStore';
 import { HistoryEntry } from '../types';
 
@@ -37,22 +38,76 @@ function tooltip(entry: HistoryEntry, when: string): vscode.MarkdownString {
   return md;
 }
 
-export class HistoryTreeProvider implements vscode.TreeDataProvider<HistoryNode> {
+export type HistoryGrouping = 'none' | 'queue' | 'day';
+
+export class HistoryGroupNode extends vscode.TreeItem {
+  constructor(
+    label: string,
+    readonly entries: HistoryEntry[],
+    icon: string,
+  ) {
+    super(label, vscode.TreeItemCollapsibleState.Expanded);
+    this.description = String(entries.length);
+    this.iconPath = new vscode.ThemeIcon(icon);
+  }
+}
+
+type Node = HistoryNode | HistoryGroupNode;
+
+const dayOf = (entry: HistoryEntry) =>
+  new Date(entry.timestamp).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+
+export class HistoryTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly emitter = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.emitter.event;
+  private query = '';
 
   constructor(private readonly history: HistoryStore) {
     history.onDidChange(() => this.emitter.fire());
   }
 
-  getTreeItem(node: HistoryNode): vscode.TreeItem {
+  /** The text entries must contain to be listed. Empty when nothing is filtered. */
+  get filter(): string {
+    return this.query;
+  }
+
+  setFilter(query: string): void {
+    this.query = query.trim();
+    this.emitter.fire();
+  }
+
+  refresh(): void {
+    this.emitter.fire();
+  }
+
+  /** How many entries pass the filter, out of how many. */
+  async counts(): Promise<{ shown: number; total: number }> {
+    const entries = await this.history.list();
+    return { shown: entries.filter((e) => matchesQuery(e, this.query)).length, total: entries.length };
+  }
+
+  getTreeItem(node: Node): vscode.TreeItem {
     return node;
   }
 
-  async getChildren(node?: HistoryNode): Promise<HistoryNode[]> {
+  async getChildren(node?: Node): Promise<Node[]> {
+    if (node instanceof HistoryGroupNode) {
+      return node.entries.map((e) => new HistoryNode(e));
+    }
     if (node) {
       return [];
     }
-    return (await this.history.list()).map((e) => new HistoryNode(e));
+    const entries = (await this.history.list()).filter((e) => matchesQuery(e, this.query));
+    const grouping = vscode.workspace.getConfiguration('serviceBusWorkbench.history').get<HistoryGrouping>('groupBy', 'none');
+    if (grouping === 'queue') {
+      return groupEntries(entries, (e) => `${e.queue} · ${e.connectionName}`).map(
+        (g) => new HistoryGroupNode(g.label, g.entries, 'inbox'),
+      );
+    }
+    if (grouping === 'day') {
+      // Entries are stored newest first, so the days come out in that order too.
+      return groupEntries(entries, dayOf).map((g) => new HistoryGroupNode(g.label, g.entries, 'calendar'));
+    }
+    return entries.map((e) => new HistoryNode(e));
   }
 }

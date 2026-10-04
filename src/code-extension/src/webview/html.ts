@@ -1,7 +1,16 @@
 import * as vscode from 'vscode';
 import { randomBytes } from 'crypto';
+import { ConnectionConfig } from '../types';
 
-/** Wraps a static body in a page that loads media/style.css and one script under a strict CSP. */
+/** Placeholder for the read-only notice. media/banner.js fills it in. */
+export const BANNER = '<div id="banner" class="banner hidden"></div>';
+
+/** The protection state a webview needs to draw the banner and hide what read-only mode forbids. */
+export function protectionOf(connection: ConnectionConfig): { readOnly: boolean } {
+  return { readOnly: !!connection.readOnly };
+}
+
+/** Wraps a static body in a page that loads media/style.css, the shared banner script and one panel script under a strict CSP. */
 export function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, script: string, body: string): string {
   const nonce = randomBytes(16).toString('base64');
   const media = (file: string) => webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', file));
@@ -15,6 +24,7 @@ export function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, sc
 </head>
 <body>
 ${body}
+<script nonce="${nonce}" src="${media('banner.js')}"></script>
 <script nonce="${nonce}" src="${media(script)}"></script>
 </body>
 </html>`;

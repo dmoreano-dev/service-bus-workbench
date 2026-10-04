@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ConnectionConfig } from '../types';
+import { ConnectionConfig, ConnectionProtection } from '../types';
 
 const CONNECTIONS_KEY = 'sbw.connections';
 const secretKey = (id: string) => `sbw.connectionString.${id}`;
@@ -24,6 +24,14 @@ export class ConnectionStore {
       await this.context.secrets.store(secretKey(config.id), connectionString);
     }
     await this.context.globalState.update(CONNECTIONS_KEY, [...this.list(), config]);
+    this.emitter.fire();
+  }
+
+  async update(id: string, protection: ConnectionProtection): Promise<void> {
+    await this.context.globalState.update(
+      CONNECTIONS_KEY,
+      this.list().map((c) => (c.id === id ? { ...c, ...protection } : c)),
+    );
     this.emitter.fire();
   }
 

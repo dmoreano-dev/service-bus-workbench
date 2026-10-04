@@ -1,6 +1,6 @@
 # Service Bus Workbench
 
-A VS Code extension to explore Azure Service Bus: list queues, peek, receive and delete, send messages, and keep a history of everything you sent or resent.
+A VS Code extension to explore Azure Service Bus: list queues, topics and subscriptions, peek, receive and delete, send messages, and keep a history of everything you sent or resent.
 
 Features, permissions, settings and limitations: [extension README](src/code-extension/README.md).
 
@@ -13,7 +13,7 @@ npm --prefix src/code-extension install               # first time only
 dotnet run --project src/aspire/ServiceBusLocal.AppHost
 ```
 
-The AppHost starts the Service Bus emulator with three queues, loads sample messages, and opens a VS Code window with the extension, which reloads on its own when you save a change. In that window: **Service Bus Workbench** icon → **Add Connection → Local emulator**.
+The AppHost starts the Service Bus emulator with a few queues and topics, loads sample messages, and opens a VS Code window with the extension, which reloads on its own when you save a change. In that window: **Service Bus Workbench** icon → **Add Connection → Local emulator**.
 
 To debug with breakpoints, open the repository root in VS Code and press `F5`.
 
@@ -26,6 +26,8 @@ From `src/code-extension`:
 | `npm run compile` | Type-checks and builds the bundle |
 | `npm run watch` | Rebuilds on save |
 | `npm run seed:local` | Loads sample messages into the emulator |
+| `npm test` | Runs the unit tests |
+| `npm run test:integration` | Runs the tests against the emulator (skipped when it is not running) |
 | `npm run vsix` | Builds the installable `.vsix` |
 
 To install the package: `code --install-extension service-bus-workbench-<version>.vsix`.

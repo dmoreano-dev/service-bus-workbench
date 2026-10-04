@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0
+
+- Topics and subscriptions: they appear in the tree next to the queues, with their counts. Peek, receive and delete, and the dead-letter queue work on a subscription; sending works on a topic.
+- Resend several messages at once: tick the rows and select "Resend selected".
+- "Move back" in a dead-letter queue sends messages again to their queue or topic and removes them from the dead-letter queue: the rows you ticked, or the oldest ones up to the count when none is ticked.
+- Read-only mode for a connection: sending, receiving and moving messages are hidden and refused.
+- New way to connect with Microsoft Entra ID: Azure CLI or environment credentials (`DefaultAzureCredential`).
+- With only the Reader role on a namespace, its queues, topics and subscriptions are listed through Azure Resource Manager. Applies to connections added with "browse my subscriptions" from this version on.
+- Adding a connection checks that it works before saving it: that it can list the namespace, or read the queue when the connection string is for a single queue. When it cannot, you see why and can still add it, unless the key of the connection string is wrong.
+- Emulator: a connection string for an emulator asks for the management port, so it can run on another host or port.
+- Sent history: search, and grouping by queue or by day.
+
 ## 0.4.0
 
 - Adding a connection with Microsoft Entra ID is available again, now verified against a real Azure namespace.

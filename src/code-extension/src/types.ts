@@ -1,22 +1,35 @@
+interface ConnectionBase {
+  id: string;
+  name: string;
+  /** Read-only mode: sending, receiving and moving messages are refused. */
+  readOnly?: boolean;
+}
+
 export type ConnectionConfig =
-  | {
-      id: string;
-      name: string;
+  | (ConnectionBase & {
       kind: 'connectionString';
       /** Set when the connection string is scoped to a single queue (EntityPath). */
       entityPath?: string;
       /** Set for the local emulator: the port of its HTTP management API. */
       emulatorAdminPort?: number;
-    }
-  | {
-      id: string;
-      name: string;
+    })
+  | (ConnectionBase & {
       kind: 'entra';
       fullyQualifiedNamespace: string;
       tenantId?: string;
-    };
+      /** Where tokens come from: the Microsoft account of VS Code (default) or DefaultAzureCredential (Azure CLI, environment…). */
+      credential?: 'vscode' | 'default';
+      /** ARM id of the namespace, known when it was picked from a subscription. Lets entities be listed through ARM. */
+      resourceId?: string;
+    });
+
+/** The protection of a connection that can be changed after it is created. */
+export type ConnectionProtection = Pick<ConnectionBase, 'readOnly'>;
 
 export type SubQueue = 'active' | 'deadLetter';
+
+/** Where messages are read from: a queue, or a subscription of a topic. */
+export type MessageSource = { queue: string } | { topic: string; subscription: string };
 
 export type PropertyValue = string | number | boolean;
 
@@ -59,6 +72,20 @@ export interface QueueInfo {
   countCap?: number;
 }
 
+export interface TopicInfo {
+  name: string;
+  subscriptionCount?: number;
+}
+
+export interface SubscriptionInfo {
+  topic: string;
+  name: string;
+  activeMessageCount?: number;
+  deadLetterMessageCount?: number;
+  /** Set when counts were obtained by peeking and stop at this number. */
+  countCap?: number;
+}
+
 export type HistoryKind = 'send' | 'resend';
 
 export interface HistoryEntry {
@@ -67,6 +94,7 @@ export interface HistoryEntry {
   kind: HistoryKind;
   connectionId: string;
   connectionName: string;
+  /** The queue or topic the message was sent to. */
   queue: string;
   /** Where a resend came from, e.g. "dead-letter #42" or "history". */
   origin?: string;

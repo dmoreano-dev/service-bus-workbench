@@ -12,6 +12,15 @@ serviceBus.AddServiceBusQueue("orders");
 serviceBus.AddServiceBusQueue("payments");
 serviceBus.AddServiceBusQueue("notifications");
 
+var orderEvents = serviceBus.AddServiceBusTopic("order-events");
+orderEvents.AddServiceBusSubscription("order-events-billing", "billing");
+orderEvents.AddServiceBusSubscription("order-events-shipping", "shipping");
+serviceBus.AddServiceBusTopic("alerts").AddServiceBusSubscription("alerts-all", "all");
+
+// Empty entities reserved for the integration tests (npm run test:integration), which send and delete messages.
+serviceBus.AddServiceBusQueue("sbw-tests");
+serviceBus.AddServiceBusTopic("sbw-tests-topic").AddServiceBusSubscription("sbw-tests-topic-all", "all");
+
 // The emulator stores its state in SQL Server, whose image is amd64-only and crashes under
 // QEMU emulation on Apple Silicon. Azure SQL Edge has a native arm64 image and works as a backend.
 if (RuntimeInformation.OSArchitecture == Architecture.Arm64)
