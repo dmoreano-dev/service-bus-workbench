@@ -28,8 +28,22 @@ ${BANNER}
 
 /** Compose form. Every send, successful or failed, goes through sendAndRecord and lands in the history. */
 export class SendPanel {
+  /** Blank compose forms, one per connection and target. Resends are not tracked: each one opens its own panel. */
+  private static readonly open = new Map<string, SendPanel>();
+
   static show(services: Services, extensionUri: vscode.Uri, request: SendRequest): void {
-    new SendPanel(services, extensionUri, request);
+    if (request.kind !== 'send') {
+      new SendPanel(services, extensionUri, request);
+      return;
+    }
+    // Reusing the panel keeps whatever draft is in it; a resend would have to overwrite it.
+    const key = `${request.connection.id}/${request.queue}`;
+    const existing = SendPanel.open.get(key);
+    if (existing) {
+      existing.panel.reveal();
+      return;
+    }
+    SendPanel.open.set(key, new SendPanel(services, extensionUri, request, key));
   }
 
   private readonly panel: vscode.WebviewPanel;
@@ -38,6 +52,7 @@ export class SendPanel {
     private readonly services: Services,
     extensionUri: vscode.Uri,
     private readonly request: SendRequest,
+    key?: string,
   ) {
     const verb = request.kind === 'resend' ? 'Resend to' : 'Send to';
     this.panel = vscode.window.createWebviewPanel(
@@ -49,7 +64,12 @@ export class SendPanel {
     this.panel.webview.html = renderHtml(this.panel.webview, extensionUri, 'send.js', BODY);
     this.panel.webview.onDidReceiveMessage((m: FromWebview) => this.handle(m));
     const protection = services.connections.onDidChange(() => this.post({ type: 'protection', ...this.protection }));
-    this.panel.onDidDispose(() => protection.dispose());
+    this.panel.onDidDispose(() => {
+      if (key) {
+        SendPanel.open.delete(key);
+      }
+      protection.dispose();
+    });
   }
 
   private get protection() {
@@ -70,7 +90,9 @@ export class SendPanel {
     this.post({ type: 'busy', busy: true });
     try {
       await sendAndRecord(this.services, { ...this.request, message: message.message });
-      this.post({ type: 'result', ok: true, text: `Sent at ${new Date().toLocaleTimeString()}. Saved to history.` });
+      // An empty body is valid in Service Bus, so it is sent; the note is there in case it was an oversight.
+      const note = message.message.body === '' ? ' Note: the body was empty.' : '';
+      this.post({ type: 'result', ok: true, text: `Sent at ${new Date().toLocaleTimeString()}. Saved to history.${note}` });
     } catch (err) {
       this.post({ type: 'result', ok: false, text: err instanceof Error ? err.message : String(err) });
     } finally {

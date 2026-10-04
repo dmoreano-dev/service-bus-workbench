@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.2 (pre-release)
+
+- "Send Message" on a queue or topic whose compose form is already open focuses that tab instead of opening another one, and keeps the draft. Resending a message still opens its own tab.
+- Sending a message with an empty body now notes it in case it was an oversight.
+
 ## 0.7.1 (pre-release)
 
 - Sending, receiving or moving messages reloads only the queue or topic involved in the tree, not every entity of every connection.
