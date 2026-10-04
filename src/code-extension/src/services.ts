@@ -11,8 +11,8 @@ export interface Services {
   connections: ConnectionStore;
   clients: ClientFactory;
   history: HistoryStore;
-  /** Reloads entities and their counts in the connections tree. */
-  refreshTree(): void;
+  /** Reloads the counts of one queue or topic (and its subscriptions) in the connections tree. */
+  refreshTree(connectionId: string, entity: string): void;
 }
 
 export interface SendRequest {
@@ -43,5 +43,5 @@ export async function sendAndRecord(services: Services, request: SendRequest): P
     throw new Error(error);
   }
   await services.history.add({ ...base, status: 'ok' });
-  services.refreshTree();
+  services.refreshTree(connection.id, queue);
 }

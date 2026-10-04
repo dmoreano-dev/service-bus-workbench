@@ -26,11 +26,19 @@ export function activate(context: vscode.ExtensionContext): void {
   clients = new ClientFactory(connections);
   const factory = clients;
 
-  // A bulk resend or a move sends many messages in a row; reload the tree once they settle.
+  // A bulk resend or a move sends many messages in a row; reload the affected entities once they settle.
   let refreshTimer: NodeJS.Timeout | undefined;
-  const refreshTree = () => {
+  const pendingRefresh = new Map<string, [connectionId: string, entity: string]>();
+  const refreshTree = (connectionId: string, entity: string) => {
+    pendingRefresh.set(`${connectionId}/${entity}`, [connectionId, entity]);
     clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => tree.refresh(), 300);
+    refreshTimer = setTimeout(() => {
+      const targets = [...pendingRefresh.values()];
+      pendingRefresh.clear();
+      for (const [id, name] of targets) {
+        void tree.refreshEntity(id, name);
+      }
+    }, 300);
   };
   const services: Services = { connections, clients: factory, history, refreshTree };
   const tree = new ConnectionsTreeProvider(services);

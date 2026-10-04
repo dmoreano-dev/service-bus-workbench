@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1 (pre-release)
+
+- Sending, receiving or moving messages reloads only the queue or topic involved in the tree, not every entity of every connection.
+
 ## 0.7.0 (pre-release)
 
 - Connection names are unique: adding a connection with a name that is already in use is refused, ignoring case. When the suggested name is taken, a free one is proposed.

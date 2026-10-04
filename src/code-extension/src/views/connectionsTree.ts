@@ -56,16 +56,24 @@ export class QueueNode extends vscode.TreeItem {
   readonly source: MessageSource;
   /** The entity a message is sent to from this node. */
   readonly sendTarget: string;
+  queue: QueueInfo;
 
   constructor(
     readonly connection: ConnectionConfig,
-    readonly queue: QueueInfo,
+    queue: QueueInfo,
   ) {
     super(queue.name, vscode.TreeItemCollapsibleState.Collapsed);
     this.source = { queue: queue.name };
     this.sendTarget = queue.name;
     this.contextValue = 'queue';
     this.iconPath = new vscode.ThemeIcon('inbox');
+    this.queue = queue;
+    this.description = describeCounts(queue);
+  }
+
+  /** Replaces the counts in place, so the tree can redraw this node alone. */
+  update(queue: QueueInfo): void {
+    this.queue = queue;
     this.description = describeCounts(queue);
   }
 }
@@ -132,13 +140,43 @@ class InfoNode extends vscode.TreeItem {
 type Node = ConnectionNode | GroupNode | QueueNode | TopicNode | SubscriptionNode | SubQueueNode | InfoNode;
 
 export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Node> {
-  private readonly emitter = new vscode.EventEmitter<void>();
+  private readonly emitter = new vscode.EventEmitter<Node | void>();
   readonly onDidChangeTreeData = this.emitter.event;
+  /** The queue and topic nodes on display, to redraw one of them without reloading the rest. */
+  private readonly entities = new Map<string, QueueNode | TopicNode>();
 
   constructor(private readonly services: Services) {}
 
   refresh(): void {
+    this.entities.clear();
     this.emitter.fire();
+  }
+
+  /**
+   * Reloads the counts of a single queue, or of the subscriptions of a single topic. Does nothing
+   * if the entity is not on display.
+   */
+  async refreshEntity(connectionId: string, entity: string): Promise<void> {
+    const node = this.entities.get(entityKey(connectionId, entity));
+    if (!node) {
+      return;
+    }
+    if (node instanceof QueueNode) {
+      try {
+        const { admin } = await this.services.clients.get(node.connection);
+        node.update(await admin.getQueue(entity));
+      } catch {
+        // Keep the counts already shown: a queue-scoped connection string may not be able to read them.
+        return;
+      }
+    }
+    // For a topic, this makes the tree ask for its subscriptions again.
+    this.emitter.fire(node);
+  }
+
+  private track<T extends QueueNode | TopicNode>(node: T): T {
+    this.entities.set(entityKey(node.connection.id, node.sendTarget), node);
+    return node;
   }
 
   getTreeItem(node: Node): vscode.TreeItem {
@@ -185,7 +223,7 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Node> {
     const { admin } = await this.services.clients.get(connection);
     // A queue-scoped connection string can't list the namespace, and may not be able to read counts either.
     const queue = await admin.getQueue(entityPath).catch(() => ({ name: entityPath }));
-    return [new QueueNode(connection, queue)];
+    return [this.track(new QueueNode(connection, queue))];
   }
 
   private async loadQueues(connection: ConnectionConfig): Promise<Node[]> {
@@ -194,7 +232,7 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Node> {
     if (queues.length === 0) {
       return [new InfoNode('No queues in this namespace', 'info')];
     }
-    return queues.map((q) => new QueueNode(connection, q));
+    return queues.map((q) => this.track(new QueueNode(connection, q)));
   }
 
   private async loadTopics(connection: ConnectionConfig): Promise<Node[]> {
@@ -203,7 +241,7 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Node> {
     if (topics.length === 0) {
       return [new InfoNode('No topics in this namespace', 'info')];
     }
-    return topics.map((t) => new TopicNode(connection, t));
+    return topics.map((t) => this.track(new TopicNode(connection, t)));
   }
 
   private async loadSubscriptions(connection: ConnectionConfig, topic: string): Promise<Node[]> {
@@ -214,6 +252,10 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Node> {
     }
     return subscriptions.map((s) => new SubscriptionNode(connection, s));
   }
+}
+
+function entityKey(connectionId: string, entity: string): string {
+  return `${connectionId}/${entity}`;
 }
 
 function subQueues(connection: ConnectionConfig, source: MessageSource, counts: Counts): Node[] {

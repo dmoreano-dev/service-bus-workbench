@@ -177,7 +177,7 @@ export class MessagesPanel {
     await this.run('receive', 'Receiving and deleting messages…', async () => {
       const { client } = await this.services.clients.get(this.connection);
       const received = await receiveAndDelete(client, this.source, this.subQueue, count);
-      this.services.refreshTree();
+      this.services.refreshTree(this.connection.id, resendTarget(this.source));
       // Show what is left, so the table never lists messages that no longer exist.
       // Reload a full page: `count` is how many to delete, not how many rows to show.
       const pageSize = vscode.workspace.getConfiguration('serviceBusWorkbench').get<number>('peekBatchSize', 50);
@@ -314,7 +314,7 @@ export class MessagesPanel {
         selected.length > 0
           ? await moveSelectedFromDeadLetter(client, this.source, selected, forward)
           : { ...(await moveFromDeadLetter(client, this.source, count, forward)), missing: 0 };
-      this.services.refreshTree();
+      this.services.refreshTree(this.connection.id, resendTarget(this.source));
       const pageSize = vscode.workspace.getConfiguration('serviceBusWorkbench').get<number>('peekBatchSize', 50);
       const remaining = await this.load(pageSize, false);
       if (result.error) {
