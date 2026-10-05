@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import { ConnectionConfig, ConnectionProtection } from '../types';
+import { pushRecent } from './recentSubscriptions';
 
 const CONNECTIONS_KEY = 'sbw.connections';
+const RECENT_SUBSCRIPTIONS_KEY = 'sbw.recentSubscriptions';
 const secretKey = (id: string) => `sbw.connectionString.${id}`;
 
 /** Connection metadata lives in globalState; connection strings live in SecretStorage. */
@@ -42,6 +44,15 @@ export class ConnectionStore {
       this.list().filter((c) => c.id !== id),
     );
     this.emitter.fire();
+  }
+
+  /** Ids of the Azure subscriptions last picked in "browse my subscriptions", most recent first. */
+  recentSubscriptions(): string[] {
+    return this.context.globalState.get<string[]>(RECENT_SUBSCRIPTIONS_KEY, []);
+  }
+
+  async rememberSubscription(subscriptionId: string): Promise<void> {
+    await this.context.globalState.update(RECENT_SUBSCRIPTIONS_KEY, pushRecent(this.recentSubscriptions(), subscriptionId));
   }
 
   getConnectionString(id: string): Thenable<string | undefined> {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0
+
+- "Browse my subscriptions" lists the last 5 subscriptions you picked in a "Recently used" group at the top, most recent first, with the rest under "Other subscriptions".
+
 ## 0.8.0
 
 Stable release of what the 0.7 pre-releases introduced.

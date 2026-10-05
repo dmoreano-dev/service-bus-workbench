@@ -5,6 +5,7 @@ import { VSCodeCredential } from '../auth/vscodeCredential';
 import { listNamespaces, listSubscriptions, listTenants, Subscription } from '../azure/arm';
 import { isNameTaken, uniqueName } from '../connections/connectionNames';
 import { ConnectionStore } from '../connections/connectionStore';
+import { splitByRecent } from '../connections/recentSubscriptions';
 import { describeError, isInvalidKey } from '../errors';
 import { ClientFactory } from '../serviceBus/clientFactory';
 import { ConnectionConfig } from '../types';
@@ -137,14 +138,14 @@ async function browseNamespaces(store: ConnectionStore, clients: ClientFactory):
       void vscode.window.showWarningMessage('No Azure subscriptions were found for this account.');
       return;
     }
-    const subscription = await vscode.window.showQuickPick(
-      subscriptions.map((s) => ({ label: s.displayName, description: s.subscriptionId, subscription: s })),
-      { title: 'Select a subscription' },
-    );
-    if (!subscription) {
+    const subscription = await vscode.window.showQuickPick(subscriptionItems(subscriptions, store.recentSubscriptions()), {
+      title: 'Select a subscription',
+    });
+    if (!subscription?.subscription) {
       return;
     }
     const { subscriptionId, tenantId } = subscription.subscription;
+    await store.rememberSubscription(subscriptionId);
     const namespaces = await withProgress('Loading Service Bus namespaces…', () =>
       listNamespaces(new VSCodeCredential(tenantId), subscriptionId),
     );
@@ -174,6 +175,24 @@ async function browseNamespaces(store: ConnectionStore, clients: ClientFactory):
   } catch (err) {
     void vscode.window.showErrorMessage(`Could not browse Azure: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+type SubscriptionItem = vscode.QuickPickItem & { subscription?: Subscription };
+
+/** The subscriptions as quick pick items, with the recently used ones in their own group at the top. */
+export function subscriptionItems(subscriptions: Subscription[], recentIds: string[]): SubscriptionItem[] {
+  const item = (s: Subscription): SubscriptionItem => ({ label: s.displayName, description: s.subscriptionId, subscription: s });
+  const { recent, others } = splitByRecent(subscriptions, recentIds);
+  if (recent.length === 0) {
+    return others.map(item);
+  }
+  const separator = (label: string): SubscriptionItem => ({ label, kind: vscode.QuickPickItemKind.Separator });
+  return [
+    separator('Recently used'),
+    ...recent.map((s) => ({ ...item(s), iconPath: new vscode.ThemeIcon('history') })),
+    ...(others.length > 0 ? [separator('Other subscriptions')] : []),
+    ...others.map(item),
+  ];
 }
 
 /**
